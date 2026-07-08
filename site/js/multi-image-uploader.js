@@ -24,9 +24,12 @@
 (function () {
   "use strict";
 
-  var DEBUG =
-    typeof localStorage !== "undefined" &&
-    localStorage.getItem("miu-debug") === "1";
+  // TEMP: diagnostics forced on for the Bookshop bring-up round. Flip back to
+  // the localStorage gate (commented below) once the flow is confirmed working.
+  var DEBUG = true;
+  // var DEBUG =
+  //   typeof localStorage !== "undefined" &&
+  //   localStorage.getItem("miu-debug") === "1";
   function log() {
     if (!DEBUG) return;
     var args = ["[MIU]"].concat([].slice.call(arguments));
@@ -79,6 +82,45 @@
     }
     warn("could not resolve the gallery's data path from bookshop-live comments");
     return null;
+  }
+
+  // TEMP diagnostic: dump what the LIVE editor DOM actually exposes around the
+  // uploader, so we can find the real data-path binding (@bookshop/live rewrites
+  // the static `<!--bookshop-live … -->` comments). Remove once resolution works.
+  function dumpEditorDom(startEl) {
+    try {
+      var walker = document.createTreeWalker(
+        document.documentElement,
+        NodeFilter.SHOW_COMMENT,
+        null,
+        false,
+      );
+      var comments = [];
+      var n;
+      while ((n = walker.nextNode())) {
+        var t = (n.textContent || "").trim();
+        if (/bookshop|content_blocks/i.test(t)) comments.push(t.slice(0, 240));
+      }
+      console.log(
+        "[MIU][dump] bookshop/content_blocks comments in live DOM:",
+        comments.length,
+        comments,
+      );
+
+      var chain = [];
+      var el = startEl;
+      while (el && el.nodeType === 1) {
+        var attrs = {};
+        for (var i = 0; i < el.attributes.length; i++) {
+          attrs[el.attributes[i].name] = el.attributes[i].value;
+        }
+        chain.push(el.tagName.toLowerCase() + " " + JSON.stringify(attrs));
+        el = el.parentElement;
+      }
+      console.log("[MIU][dump] ancestor chain from uploader (inner→outer):", chain);
+    } catch (e) {
+      console.log("[MIU][dump] failed:", e);
+    }
   }
 
   function uploadAll(slug, fileList, onStatus) {
@@ -213,6 +255,7 @@
     }
 
     upload(files) {
+      dumpEditorDom(this);
       var slug = resolveSlug(this);
       log("upload starting", {
         files: [].slice.call(files).map(function (f) {
