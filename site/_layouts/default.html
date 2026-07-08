@@ -25,5 +25,26 @@
 
     <script src="/js/scripts.js"></script>
     <script src="/js/common.js"></script>
+
+    <!--
+        Multi-image uploader — loaded ONLY inside the CloudCannon Visual Editor.
+        The <multi-image-uploader> custom element is therefore only ever defined
+        in the editor, so the gallery's `:defined` CSS keeps the pill out of the
+        published site. See site/js/multi-image-uploader.js.
+    -->
+    <script>
+      (function () {
+        function loadUploader() {
+          var s = document.createElement("script");
+          s.src = "/js/multi-image-uploader.js";
+          document.body.appendChild(s);
+        }
+        if (window.CloudCannonAPI || window.inEditorMode) {
+          loadUploader();
+        } else {
+          document.addEventListener("cloudcannon:load", loadUploader, { once: true });
+        }
+      })();
+    </script>
 </body>
 </html>

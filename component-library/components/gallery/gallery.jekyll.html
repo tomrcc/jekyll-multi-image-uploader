@@ -1,0 +1,26 @@
+{% assign c = "c-gallery" %}
+<section class="section {{c}}" id="gallery">
+  <div class="container">
+    <div class="row">
+      <div class="col col-12">
+        {%- comment -%}
+          `relative` anchors the editor-only floating uploader pill to this
+          component's corner. The uploader sits outside the images grid so the
+          grid renders exactly as it will in production (where no uploader
+          exists). See site/js/multi-image-uploader.js.
+        {%- endcomment -%}
+        <div class="{{c}}__inner">
+          <div class="{{c}}__grid">
+            {% for image in include.images %}
+              <figure class="{{c}}__item">
+                <img loading="lazy" src="{{ image.image }}" alt="{{ image.image_alt }}">
+              </figure>
+            {% endfor %}
+          </div>
+
+          <multi-image-uploader></multi-image-uploader>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
