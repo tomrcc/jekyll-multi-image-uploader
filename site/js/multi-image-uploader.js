@@ -66,8 +66,48 @@
   // that event, so we dispatch it ourselves. (renderFrequency throttles to ~1s,
   // so one dispatch after the whole batch is enough and coalesces cleanly.)
   function triggerLiveRerender() {
-    document.dispatchEvent(new CustomEvent("cloudcannon:update"));
-    log("dispatched cloudcannon:update → live re-render");
+    var cc = window.CloudCannon;
+    // The editor's own API exposes triggerUpdateEvent(); it fires the
+    // `cloudcannon:update` the Bookshop live connector listens for. Fall back to
+    // dispatching the event directly if the method isn't present.
+    if (cc && typeof cc.triggerUpdateEvent === "function") {
+      cc.triggerUpdateEvent();
+      log("called CloudCannon.triggerUpdateEvent() → live re-render");
+    } else {
+      document.dispatchEvent(new CustomEvent("cloudcannon:update"));
+      log("dispatched cloudcannon:update → live re-render");
+    }
+  }
+
+  // Read a dotted data path (e.g. "content_blocks.1.images") out of a plain
+  // front-matter object. Array indices work as string keys in JS.
+  function getByPath(obj, path) {
+    return path.split(".").reduce(function (acc, key) {
+      return acc == null ? acc : acc[key];
+    }, obj);
+  }
+
+  // Append items to the gallery's array through the LEGACY window.CloudCannon
+  // API — the surface that actually backs this editor's front matter and live
+  // preview (window.CloudCannonAPI.useVersion("v1") does NOT: its addArrayItem
+  // left content_blocks[N].images unchanged). Read current array → append →
+  // set the whole array back → trigger a re-render.
+  function appendImages(slug, items) {
+    var cc = window.CloudCannon;
+    if (!cc || typeof cc.set !== "function" || typeof cc.value !== "function") {
+      console.error("[MIU] window.CloudCannon.set/value unavailable; cannot append");
+      return Promise.resolve(false);
+    }
+    return Promise.resolve(
+      cc.value({ keepMarkdownAsHTML: false, preferBlobs: true }),
+    ).then(function (data) {
+      var current = getByPath(data, slug);
+      var next = (Array.isArray(current) ? current : []).concat(items);
+      log("CloudCannon.set", { slug: slug, from: current && current.length, to: next.length });
+      return Promise.resolve(cc.set(slug, next)).then(function () {
+        return true;
+      });
+    });
   }
 
   // TEMP diagnostic: enumerate a CloudCannon API surface's function names
@@ -163,33 +203,32 @@
 
       return getInputConfig().then(function (inputConfig) {
         var done = 0;
+        var uploaded = [];
         diagnose("before");
         onStatus("Uploading 0/" + files.length + "…");
 
-        // Sequential: keeps append order deterministic and avoids racing the
-        // re-render Bookshop fires on each data write.
+        // Sequential upload: keeps append order deterministic. Items are
+        // collected and written to the front matter in one set() at the end.
         return files
           .reduce(function (chain, f) {
             return chain.then(function () {
               return Promise.resolve(api.uploadFile(f, inputConfig))
                 .then(function (url) {
-                  var value = { image: url, image_alt: "" };
-                  log("uploaded → addArrayItem", { file: f.name, url, slug });
-                  // Writes the data; the live repaint is triggered separately
-                  // via triggerLiveRerender() once the batch completes.
-                  return file.data.addArrayItem({ slug: slug, value: value });
-                })
-                .then(function () {
+                  log("uploaded", { file: f.name, url });
+                  uploaded.push({ image: url, image_alt: "" });
                   done++;
                 })
                 .catch(function (err) {
-                  console.error("[MIU] upload/append failed:", f.name, err);
+                  console.error("[MIU] upload failed:", f.name, err);
                 })
                 .then(function () {
                   onStatus("Uploading " + done + "/" + files.length + "…");
                 });
             });
           }, Promise.resolve())
+          .then(function () {
+            if (uploaded.length) return appendImages(slug, uploaded);
+          })
           .then(function () {
             return diagnose("after");
           })
