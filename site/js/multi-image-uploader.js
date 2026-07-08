@@ -70,6 +70,53 @@
     log("dispatched cloudcannon:update → live re-render");
   }
 
+  // TEMP diagnostic: enumerate a CloudCannon API surface's function names
+  // (own + prototype chain) so we can see which data-mutation methods exist.
+  function fnNames(obj) {
+    var names = [];
+    var o = obj;
+    while (o && o !== Object.prototype) {
+      Object.getOwnPropertyNames(o).forEach(function (k) {
+        try {
+          if (typeof obj[k] === "function" && names.indexOf(k) < 0) names.push(k);
+        } catch (e) {}
+      });
+      o = Object.getPrototypeOf(o);
+    }
+    return names.sort();
+  }
+
+  // TEMP diagnostic: read the front matter this editor is actually backed by
+  // (legacy window.CloudCannon.value()) and report the gallery array length,
+  // so we can tell whether our write landed.
+  function diagnose(tag) {
+    try {
+      var cc = window.CloudCannon;
+      console.log("[MIU][diag] window.CloudCannon fns:", cc ? fnNames(cc) : null);
+      console.log("[MIU][diag] window.CloudCannonAPI present:", !!window.CloudCannonAPI);
+      if (cc && cc.value) {
+        return Promise.resolve(
+          cc.value({ keepMarkdownAsHTML: false, preferBlobs: true }),
+        )
+          .then(function (v) {
+            var arr =
+              v && v.content_blocks && v.content_blocks[1] && v.content_blocks[1].images;
+            console.log(
+              "[MIU][diag " + tag + "] content_blocks[1].images length:",
+              arr ? arr.length : "(none)",
+              arr,
+            );
+          })
+          .catch(function (e) {
+            console.log("[MIU][diag] value() failed:", e);
+          });
+      }
+    } catch (e) {
+      console.log("[MIU][diag] failed:", e);
+    }
+    return Promise.resolve();
+  }
+
   // Resolve the gallery's data path from CloudCannon's live-editing binding.
   // In the Visual Editor the component's root element carries a `data-cms-bind`
   // attribute holding the block's data path, e.g. `#content_blocks.1`. Strip the
@@ -116,6 +163,7 @@
 
       return getInputConfig().then(function (inputConfig) {
         var done = 0;
+        diagnose("before");
         onStatus("Uploading 0/" + files.length + "…");
 
         // Sequential: keeps append order deterministic and avoids racing the
@@ -142,6 +190,9 @@
                 });
             });
           }, Promise.resolve())
+          .then(function () {
+            return diagnose("after");
+          })
           .then(function () {
             if (done > 0) triggerLiveRerender();
             onStatus(
