@@ -1,0 +1,25 @@
+{
+  "name": "vonge-jekyll-bookshop-template",
+  "private": true,
+  "description": "Vonge template for CloudCannon",
+  "scripts": {
+    "jekyll:install": "bundle config set --local path 'vendor/bundle' && BUNDLE_GEMFILE=site/Gemfile bundle install",
+    "build": "BUNDLE_GEMFILE=site/Gemfile bundle exec jekyll build --source site",
+    "start": "BUNDLE_GEMFILE=site/Gemfile bundle exec jekyll serve --source site --port 6060 --trace --unpublished",
+    "update-bookshop": "npx @bookshop/up@latest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CloudCannon/vonge-jekyll-bookshop-template.git"
+  },
+  "author": "CloudCannon",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CloudCannon/vonge-jekyll-bookshop-template/issues"
+  },
+  "homepage": "https://github.com/CloudCannon/vonge-jekyll-bookshop-template#readme",
+  "dependencies": {
+    "@bookshop/jekyll-engine": "3.16.5",
+    "@bookshop/generate": "3.16.5"
+  }
+}

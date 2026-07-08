@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+npx -y @pagebreak/cli --source _site --output _site
+npx @bookshop/generate

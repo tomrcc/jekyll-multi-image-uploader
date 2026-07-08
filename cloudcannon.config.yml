@@ -1,0 +1,115 @@
+timezone: Etc/UTC
+source: site
+
+# Git commit config
+commit_templates:
+  - label: Default message
+    template_string: '[default_commit_message]'
+  - label: Custom message
+    template_string: '{message}'
+
+# Asset paths
+paths:
+  uploads: uploads
+  static: ''
+
+# Collections 
+collections_config:
+  data:
+    path: _data
+    disable_url: true
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+  posts:
+    path: collections/_posts
+    url: "/blog/[slug]/"
+    icon: newspaper
+    create:
+      path: >-
+        [relative_base_path]/{date|year}-{date|month}-{date|day}-{title|slugify}.[ext]
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+    schemas:
+      default:
+        path: ".cloudcannon/schemas/post.md"
+  pages:
+    path: collections/_pages
+    url: "/[slug]/"
+    icon: wysiwyg
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+    schemas:
+      default:
+        path: ".cloudcannon/schemas/page.html"
+  projects:
+    path: collections/_projects
+    url: "/project/[slug]/"
+    description: ''
+    icon: work
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+    schemas:
+      default:
+        path: ".cloudcannon/schemas/project.md"
+  testimonials:
+    path: collections/_testimonials
+    disable_url: true
+    icon: format_quote
+    sort_options:
+      - key: name
+      - key: name
+        order: desc
+      - key: position
+      - key: position
+        order: desc
+    _enabled_editors:
+      - data
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+    schemas:
+      default:
+        path: ".cloudcannon/schemas/testimonial.md"
+  drafts:
+    path: collections/_drafts
+    disable_url: true
+    icon: newspaper
+    create:
+      publish_to: posts
+    disable_add: false
+    disable_add_folder: false
+    disable_file_actions: false
+
+# Sidebar
+collection_groups:
+  - heading: Content
+    collections:
+      - pages
+      - projects
+      - testimonials
+  - heading: Blogging
+    collections:
+      - posts
+      - drafts
+  - heading: Settings
+    collections:
+      - data
+
+# Globally scoped inputs
+_inputs:
+  tags:
+    type: multiselect
+    options:
+      allow_create: true
+      empty_type: array
+    cascade: true
+
+# Globally scoped structs
+_structures:
+  content_blocks:
+    style: modal
+    values: []
