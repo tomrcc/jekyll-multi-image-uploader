@@ -59,68 +59,21 @@
 
   var apiPromise = getApi();
 
-  // Resolve the gallery's data path from the Bookshop live-editing comment that
-  // wraps this component, e.g. `<!--bookshop-live name(gallery/gallery.jekyll.html)
-  // … context(block=content_blocks[2]) -->` → `content_blocks[2].images`.
-  //
-  // Walk up the DOM; at each level scan preceding sibling nodes for that comment.
+  // Resolve the gallery's data path from CloudCannon's live-editing binding.
+  // In the Visual Editor the component's root element carries a `data-cms-bind`
+  // attribute holding the block's data path, e.g. `#content_blocks.1`. Strip the
+  // leading `#` and append the array field → `content_blocks.1.images`.
+  // (The static `<!--bookshop-live … -->` comments are rewritten by @bookshop/live
+  // into a different, split form in the live DOM, so this attribute is the
+  // reliable anchor.)
   function resolveSlug(startEl) {
-    var node = startEl;
-    while (node) {
-      var sib = node.previousSibling;
-      while (sib) {
-        if (sib.nodeType === 8 /* COMMENT_NODE */) {
-          var text = sib.textContent || "";
-          if (/name\(gallery\//.test(text)) {
-            var m = text.match(/content_blocks\[(\d+)\]/);
-            if (m) return "content_blocks[" + m[1] + "].images";
-          }
-        }
-        sib = sib.previousSibling;
-      }
-      node = node.parentNode;
+    var bound = startEl.closest("[data-cms-bind]");
+    var bind = bound && bound.getAttribute("data-cms-bind");
+    if (!bind) {
+      warn("could not resolve the gallery's data path (no [data-cms-bind])");
+      return null;
     }
-    warn("could not resolve the gallery's data path from bookshop-live comments");
-    return null;
-  }
-
-  // TEMP diagnostic: dump what the LIVE editor DOM actually exposes around the
-  // uploader, so we can find the real data-path binding (@bookshop/live rewrites
-  // the static `<!--bookshop-live … -->` comments). Remove once resolution works.
-  function dumpEditorDom(startEl) {
-    try {
-      var walker = document.createTreeWalker(
-        document.documentElement,
-        NodeFilter.SHOW_COMMENT,
-        null,
-        false,
-      );
-      var comments = [];
-      var n;
-      while ((n = walker.nextNode())) {
-        var t = (n.textContent || "").trim();
-        if (/bookshop|content_blocks/i.test(t)) comments.push(t.slice(0, 240));
-      }
-      console.log(
-        "[MIU][dump] bookshop/content_blocks comments in live DOM:",
-        comments.length,
-        comments,
-      );
-
-      var chain = [];
-      var el = startEl;
-      while (el && el.nodeType === 1) {
-        var attrs = {};
-        for (var i = 0; i < el.attributes.length; i++) {
-          attrs[el.attributes[i].name] = el.attributes[i].value;
-        }
-        chain.push(el.tagName.toLowerCase() + " " + JSON.stringify(attrs));
-        el = el.parentElement;
-      }
-      console.log("[MIU][dump] ancestor chain from uploader (inner→outer):", chain);
-    } catch (e) {
-      console.log("[MIU][dump] failed:", e);
-    }
+    return bind.replace(/^#/, "") + ".images";
   }
 
   function uploadAll(slug, fileList, onStatus) {
@@ -255,7 +208,6 @@
     }
 
     upload(files) {
-      dumpEditorDom(this);
       var slug = resolveSlug(this);
       log("upload starting", {
         files: [].slice.call(files).map(function (f) {
