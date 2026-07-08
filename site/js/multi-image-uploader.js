@@ -59,6 +59,17 @@
 
   var apiPromise = getApi();
 
+  // Repaint the live preview after a data write. Bookshop's live-editing
+  // connector (from @bookshop/generate) re-renders ONLY when a `cloudcannon:update`
+  // event fires — its handler re-reads `CloudCannon.value()` and calls
+  // `bookshopLive.update()`. Our JS-API writes update the data but never emit
+  // that event, so we dispatch it ourselves. (renderFrequency throttles to ~1s,
+  // so one dispatch after the whole batch is enough and coalesces cleanly.)
+  function triggerLiveRerender() {
+    document.dispatchEvent(new CustomEvent("cloudcannon:update"));
+    log("dispatched cloudcannon:update → live re-render");
+  }
+
   // Resolve the gallery's data path from CloudCannon's live-editing binding.
   // In the Visual Editor the component's root element carries a `data-cms-bind`
   // attribute holding the block's data path, e.g. `#content_blocks.1`. Strip the
@@ -116,7 +127,8 @@
                 .then(function (url) {
                   var value = { image: url, image_alt: "" };
                   log("uploaded → addArrayItem", { file: f.name, url, slug });
-                  // Raw API: Bookshop's live engine re-renders on data change.
+                  // Writes the data; the live repaint is triggered separately
+                  // via triggerLiveRerender() once the batch completes.
                   return file.data.addArrayItem({ slug: slug, value: value });
                 })
                 .then(function () {
@@ -131,6 +143,7 @@
             });
           }, Promise.resolve())
           .then(function () {
+            if (done > 0) triggerLiveRerender();
             onStatus(
               done === files.length
                 ? "Added " + done + " image" + (done === 1 ? "" : "s") + "."
