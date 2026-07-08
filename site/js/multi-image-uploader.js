@@ -5,17 +5,22 @@
 // <multi-image-uploader> element renders a floating "＋ Add images" pill in the
 // corner of each Gallery block. Selecting/dropping several files uploads them
 // all in one action and appends each to that block's `images` array, so the
-// grid fills in live.
+// front matter grows and the grid fills in live.
 //
-// How the Bookshop edition differs from the Astro/Editable-Regions edition:
-//   - Live re-rendering is driven by @bookshop/live, which re-renders a
-//     component region whenever its underlying DATA changes. So we call the
-//     raw `currentFile().data.addArrayItem({ slug, value })` API directly and
-//     Bookshop repaints — no bubbling `cloudcannon-api` event needed (that is
-//     an Editable-Regions-only mechanism, absent here).
-//   - There are no `data-editable`/`data-prop` attributes to walk. Instead the
-//     component's data path lives in a `<!--bookshop-live … context(block=
-//     content_blocks[N]) -->` comment that wraps the region. We parse N from it.
+// Two CloudCannon client APIs exist in the editor, and this uses BOTH — using
+// the wrong one for the data write is what makes the grid silently not update:
+//   1. window.CloudCannonAPI.useVersion("v1") — used here for uploadFile()
+//      (pushes the bytes to the media library and returns a URL).
+//   2. window.CloudCannon (the legacy API the Bookshop live editor is built on)
+//      — this is what actually backs the page's front matter and live preview.
+//      We append with CloudCannon.set(slug, newArray) and repaint with
+//      CloudCannon.triggerUpdateEvent(). Writing the array via API #1 instead
+//      leaves the front matter untouched — the upload "succeeds" but nothing
+//      appears.
+//
+// The target array's data path (e.g. "content_blocks.1.images") is read from
+// the `data-cms-bind` attribute CloudCannon puts on the component's root
+// element in the editor (see resolveSlug).
 //
 // Loaded only inside the editor (see _layouts/default.html). Set
 // `localStorage.miu-debug = "1"` and reload for verbose `[MIU]` tracing; errors
@@ -24,12 +29,9 @@
 (function () {
   "use strict";
 
-  // TEMP: diagnostics forced on for the Bookshop bring-up round. Flip back to
-  // the localStorage gate (commented below) once the flow is confirmed working.
-  var DEBUG = true;
-  // var DEBUG =
-  //   typeof localStorage !== "undefined" &&
-  //   localStorage.getItem("miu-debug") === "1";
+  var DEBUG =
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem("miu-debug") === "1";
   function log() {
     if (!DEBUG) return;
     var args = ["[MIU]"].concat([].slice.call(arguments));
@@ -60,11 +62,10 @@
   var apiPromise = getApi();
 
   // Repaint the live preview after a data write. Bookshop's live-editing
-  // connector (from @bookshop/generate) re-renders ONLY when a `cloudcannon:update`
-  // event fires — its handler re-reads `CloudCannon.value()` and calls
-  // `bookshopLive.update()`. Our JS-API writes update the data but never emit
-  // that event, so we dispatch it ourselves. (renderFrequency throttles to ~1s,
-  // so one dispatch after the whole batch is enough and coalesces cleanly.)
+  // connector (from @bookshop/generate) re-renders when a `cloudcannon:update`
+  // event fires — its handler re-reads CloudCannon.value() and calls
+  // bookshopLive.update() (throttled to ~1s). CloudCannon.triggerUpdateEvent()
+  // is the editor's own way to fire that; call it once after the whole batch.
   function triggerLiveRerender() {
     var cc = window.CloudCannon;
     // The editor's own API exposes triggerUpdateEvent(); it fires the
@@ -108,53 +109,6 @@
         return true;
       });
     });
-  }
-
-  // TEMP diagnostic: enumerate a CloudCannon API surface's function names
-  // (own + prototype chain) so we can see which data-mutation methods exist.
-  function fnNames(obj) {
-    var names = [];
-    var o = obj;
-    while (o && o !== Object.prototype) {
-      Object.getOwnPropertyNames(o).forEach(function (k) {
-        try {
-          if (typeof obj[k] === "function" && names.indexOf(k) < 0) names.push(k);
-        } catch (e) {}
-      });
-      o = Object.getPrototypeOf(o);
-    }
-    return names.sort();
-  }
-
-  // TEMP diagnostic: read the front matter this editor is actually backed by
-  // (legacy window.CloudCannon.value()) and report the gallery array length,
-  // so we can tell whether our write landed.
-  function diagnose(tag) {
-    try {
-      var cc = window.CloudCannon;
-      console.log("[MIU][diag] window.CloudCannon fns:", cc ? fnNames(cc) : null);
-      console.log("[MIU][diag] window.CloudCannonAPI present:", !!window.CloudCannonAPI);
-      if (cc && cc.value) {
-        return Promise.resolve(
-          cc.value({ keepMarkdownAsHTML: false, preferBlobs: true }),
-        )
-          .then(function (v) {
-            var arr =
-              v && v.content_blocks && v.content_blocks[1] && v.content_blocks[1].images;
-            console.log(
-              "[MIU][diag " + tag + "] content_blocks[1].images length:",
-              arr ? arr.length : "(none)",
-              arr,
-            );
-          })
-          .catch(function (e) {
-            console.log("[MIU][diag] value() failed:", e);
-          });
-      }
-    } catch (e) {
-      console.log("[MIU][diag] failed:", e);
-    }
-    return Promise.resolve();
   }
 
   // Resolve the gallery's data path from CloudCannon's live-editing binding.
@@ -204,7 +158,6 @@
       return getInputConfig().then(function (inputConfig) {
         var done = 0;
         var uploaded = [];
-        diagnose("before");
         onStatus("Uploading 0/" + files.length + "…");
 
         // Sequential upload: keeps append order deterministic. Items are
@@ -228,9 +181,6 @@
           }, Promise.resolve())
           .then(function () {
             if (uploaded.length) return appendImages(slug, uploaded);
-          })
-          .then(function () {
-            return diagnose("after");
           })
           .then(function () {
             if (done > 0) triggerLiveRerender();
